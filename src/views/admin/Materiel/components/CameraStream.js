@@ -41,6 +41,7 @@ const CameraStream = () => {
         CameraPreview.stop();
       } else {
         if (videoRef.current && videoRef.current.srcObject) {
+          // eslint-disable-next-line
           let tracks = videoRef.current.srcObject.getTracks();
           tracks.forEach((track) => track.stop());
         }
