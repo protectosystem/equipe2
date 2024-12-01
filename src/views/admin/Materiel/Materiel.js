@@ -20,21 +20,16 @@ import InventaireForm from './components/InventaireForm';
 import AfficherMateriels from './components/AfficherMateriels';
 import QrCodeImageExport from './components/QrCodeImageExport';
 import VideoCaptureBisBis from './components/VideoCaptureBisBis';
-import CameraStream from './components/CameraStream'; // Import du nouveau composant
 
 const Materiel = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [showCreateMaterial, setShowCreateMaterial] = useState(false);
   const [showQRScannerModal, setShowQRScannerModal] = useState(false);
-  const [showCameraStreamModal, setShowCameraStreamModal] = useState(false); // Nouvel état pour CameraStream
-
   const textColor = useColorModeValue('secondaryGray.900', 'white');
-
   const openModal = () => setIsOpen(true);
   const closeModal = () => setIsOpen(false);
   const toggleCreateMaterialModal = () => setShowCreateMaterial(!showCreateMaterial);
   const toggleQRScannerModal = () => setShowQRScannerModal(!showQRScannerModal);
-  const toggleCameraStreamModal = () => setShowCameraStreamModal(!showCameraStreamModal); // Fonction de bascule pour CameraStream
 
   return (
     <Box pt={{ base: '180px', md: '80px', xl: '80px' }}>
@@ -86,19 +81,6 @@ const Materiel = () => {
             Feuille d'impression des étiquettes
           </Button>
           {/* Nouveau bouton pour accéder au flux caméra */}
-          <Button
-            onClick={toggleCameraStreamModal}
-            leftIcon={<Icon as={FcCameraIdentification} />}
-            colorScheme="blue"
-            variant="solid"
-            size="md"
-            boxShadow="sm"
-            _hover={{ boxShadow: 'md' }}
-            _active={{ boxShadow: 'lg' }}
-            mr={2}
-          >
-            Accéder au flux caméra
-          </Button>
         </Flex>
       </Flex>
 
@@ -147,22 +129,6 @@ const Materiel = () => {
           </ModalBody>
           <ModalFooter>
             <Button colorScheme="blue" mr={3} onClick={toggleQRScannerModal}>
-              Fermer
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-
-      {/* Modal pour le flux caméra */}
-      <Modal isOpen={showCameraStreamModal} onClose={toggleCameraStreamModal} size="full">
-        <ModalOverlay />
-        <ModalContent>
-          <ModalCloseButton />
-          <ModalBody>
-            <CameraStream />
-          </ModalBody>
-          <ModalFooter>
-            <Button colorScheme="blue" mr={3} onClick={toggleCameraStreamModal}>
               Fermer
             </Button>
           </ModalFooter>
