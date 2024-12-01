@@ -1,8 +1,9 @@
 // src/views/admin/Materiel/components/VideoCaptureBisBis.jsx
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import jsQR from 'jsqr';
 import { Capacitor } from '@capacitor/core';
+import { CameraPreview } from '@capacitor-community/camera-preview';
 import { supabase } from './../../../../supabaseClient';
 import {
   ModalCloseButton, Box, Text, VStack, Badge, Alert, AlertIcon, IconButton,
@@ -16,7 +17,8 @@ import { useHistory } from 'react-router-dom';
 import { useTeam } from './../../../../views/admin/InterfaceEquipe/TeamContext';
 
 const VideoCaptureBisBis = () => {
-  const videoRef = useRef(null);
+  const videoRef = useRef(null); // Pour l'élément vidéo web
+  const canvasRef = useRef(null); // Pour traiter les images avec jsQR
   const [materiel, setMateriel] = useState(null);
   const [isQRCodeDetected, setIsQRCodeDetected] = useState(false);
   const [noMatchingMaterial, setNoMatchingMaterial] = useState(false);
@@ -24,16 +26,19 @@ const VideoCaptureBisBis = () => {
   const [streamError, setStreamError] = useState(false);
   const toast = useToast();
   const { selectedTeam, teamUUID, setSelectedTeam } = useTeam();
+  const { isOpen, onClose } = useDisclosure();
+  const { isOpen: isAssociationModalOpen, onOpen: onAssociationModalOpen, onClose: onAssociationModalClose } = useDisclosure();
 
-  // Déclarez isNativeApp avant toute utilisation
   const isNativeApp = Capacitor.isNativePlatform();
 
+  // Fonction pour valider le format UUID
   const isValidUUID = (id) => {
     const uuidRegex =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return uuidRegex.test(id);
   };
 
+  // Fonction pour associer le matériel à une équipe
   const associateMaterialToTeam = useCallback(async (materialId) => {
     if (!teamUUID) {
       console.error("No team selected.");
@@ -52,7 +57,7 @@ const VideoCaptureBisBis = () => {
         .from('vianney_inventaire_materiel')
         .update({ associated_team_id: teamUUID })
         .eq('id', materialId)
-        .select('*') // Récupérer toutes les colonnes
+        .select('*')
         .single();
 
       if (error) {
@@ -68,7 +73,6 @@ const VideoCaptureBisBis = () => {
         isClosable: true,
       });
 
-      // Mettre à jour l'état local avec les données complètes du matériel
       setMateriel(data);
       setNoMatchingMaterial(false);
     } catch (error) {
@@ -83,11 +87,12 @@ const VideoCaptureBisBis = () => {
     }
   }, [teamUUID, selectedTeam, toast]);
 
+  // Fonction pour récupérer le matériel depuis la base de données
   const fetchMateriel = useCallback(async (id) => {
     try {
       if (!isValidUUID(id)) {
         setNoMatchingMaterial(true);
-        return;
+        return false;
       }
 
       const { data, error } = await supabase
@@ -96,22 +101,54 @@ const VideoCaptureBisBis = () => {
         .eq("id", id)
         .single();
 
-      if (error) throw error;
-
-      if (!data) {
+      if (error || !data) {
         setNoMatchingMaterial(true);
+        return false;
       } else {
         setMateriel(data);
         setNoMatchingMaterial(false);
+        return true;
       }
     } catch (error) {
       console.error("Error fetching item details:", error);
+      setNoMatchingMaterial(true);
+      return false;
     }
   }, []);
 
-  const scanQRCode = useCallback(
+  // Fonction pour traiter les données du QR code
+  const processQR = useCallback(async (imageData, width, height) => {
+    const code = jsQR(imageData.data, width, height, {
+      inversionAttempts: "dontInvert",
+    });
+
+    if (code) {
+      console.log("QR Code détecté :", code.data);
+      const isValid = await fetchMateriel(code.data);
+      if (isValid) {
+        await associateMaterialToTeam(code.data);
+        setIsQRCodeDetected(true);
+        return true; // QR code valide détecté
+      } else {
+        console.log("QR Code invalide ou matériel non trouvé.");
+        // Afficher un toast ou un message d'erreur
+        toast({
+          title: "QR Code invalide",
+          description: "Le QR code scanné ne correspond à aucun matériel valide.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
+        return false; // QR code invalide, continuer le scan
+      }
+    }
+    return false; // Aucun QR code détecté, continuer le scan
+  }, [fetchMateriel, associateMaterialToTeam, toast]);
+
+  // Fonction pour scanner les QR codes sur le web
+  const scanQRCodeWeb = useCallback(
     (stream) => {
-      const canvas = document.createElement("canvas");
+      const canvas = canvasRef.current;
       const ctx = canvas.getContext("2d");
 
       const checkQRCode = () => {
@@ -124,97 +161,192 @@ const VideoCaptureBisBis = () => {
           ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
 
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: "dontInvert",
+          processQR(imageData, imageData.width, imageData.height).then((detected) => {
+            if (detected) {
+              console.log("QR Code valide détecté, arrêt du flux.");
+              stream.getTracks().forEach((track) => track.stop());
+              return;
+            }
+            // Continuer le scan
+            requestAnimationFrame(checkQRCode);
           });
-
-          if (code) {
-            console.log("QR Code data:", code.data);
-            fetchMateriel(code.data);
-            associateMaterialToTeam(code.data);
-            stream.getTracks().forEach((track) => track.stop());
-            setIsQRCodeDetected(true);
-            return;
-          }
+        } else {
+          requestAnimationFrame(checkQRCode);
         }
-        requestAnimationFrame(checkQRCode);
       };
 
-      checkQRCode();
+      // Ajouter un délai avant de commencer le scan pour éviter les faux positifs immédiats
+      setTimeout(() => {
+        console.log("Début du scan QR code après délai.");
+        checkQRCode();
+      }, 500); // Délai de 1 seconde
     },
-    [fetchMateriel, associateMaterialToTeam]
+    [processQR]
   );
 
-  const enableStream = useCallback(async () => {
+  // Fonction pour scanner les QR codes sur les plateformes natives
+  const scanQRCodeNative = useCallback(async () => {
     try {
-      const constraints = {
-        video: { facingMode: "environment" }, // Utiliser la caméra arrière
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-      scanQRCode(stream);
-      setStreamError(false);
+      const interval = setInterval(async () => {
+        try {
+          const result = await CameraPreview.capture({
+            quality: 90,
+          });
+          const img = new Image();
+          img.src = `data:image/jpeg;base64,${result.value}`;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            processQR(imageData, imageData.width, imageData.height).then((detected) => {
+              if (detected) {
+                clearInterval(interval);
+                CameraPreview.stop();
+              }
+            });
+          };
+        } catch (error) {
+          console.error("Error capturing frame for QR code scanning:", error);
+        }
+      }, 1000); // Capture toutes les secondes
     } catch (err) {
-      console.error("Erreur lors de l'accès à la caméra :", err);
+      console.error("Error during native QR code scanning:", err);
       setStreamError(true);
+    }
+  }, [processQR]);
 
-      if (err.name === "OverconstrainedError") {
+  // Fonction pour gérer les erreurs de flux vidéo
+  const handleStreamError = (err) => {
+    setStreamError(true);
+    
+    const errorMessages = {
+      'OverconstrainedError': "Impossible d'accéder à la caméra avec les contraintes spécifiées. Essayez de changer de caméra.",
+      'NotAllowedError': "Veuillez autoriser l'accès à la caméra dans les paramètres de votre navigateur.",
+      'default': "Impossible d'accéder à la caméra. Vérifiez les permissions ou réessayez."
+    };
+
+    toast({
+      title: "Erreur d'accès à la caméra",
+      description: errorMessages[err.name] || errorMessages['default'],
+      status: "error",
+      duration: 5000,
+      isClosable: true,
+    });
+  };
+
+  // Fonction pour activer le flux vidéo
+  const enableStream = useCallback(async () => {
+    if (isNativeApp) {
+      try {
+        await CameraPreview.start({
+          position: 'rear',
+          toBack: false,
+          width: window.innerWidth,
+          height: window.innerHeight,
+          parent: 'cameraPreview', // Assurez-vous que l'ID correspond dans le rendu
+          tapPhoto: false,
+          previewDrag: false,
+          storeToGallery: false,
+        });
+        scanQRCodeNative();
         toast({
-          title: "Erreur d'accès à la caméra",
-          description:
-            "Impossible d'accéder à la caméra avec les contraintes spécifiées. Essayez de changer de caméra.",
+          title: "Camera",
+          description: "Caméra native activée et en cours de scan.",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+        setStreamError(false);
+      } catch (err) {
+        console.error('Erreur lors de l\'accès à la caméra sur la plateforme native', err);
+        setStreamError(true);
+        toast({
+          title: "Erreur de caméra",
+          description: "Impossible d'accéder à la caméra.",
           status: "error",
           duration: 5000,
           isClosable: true,
         });
-      } else if (err.name === "NotAllowedError") {
-        toast({
-          title: "Accès à la caméra refusé",
-          description:
-            "Veuillez autoriser l'accès à la caméra dans les paramètres de votre navigateur.",
-          status: "error",
-          duration: 5000,
-          isClosable: true,
-        });
-      } else {
-        toast({
-          title: "Erreur d'accès à la caméra",
-          description:
-            "Impossible d'accéder à la caméra. Vérifiez les permissions ou réessayez.",
-          status: "error",
-          duration: 5000,
-          isClosable: true,
-        });
+      }
+    } else {
+      try {
+        const constraints = {
+          video: { 
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current.play()
+              .then(() => {
+                console.log("Video stream started successfully.");
+                toast({
+                  title: "Succès",
+                  description: "Flux vidéo démarré avec succès.",
+                  status: "success",
+                  duration: 3000,
+                  isClosable: true,
+                });
+                scanQRCodeWeb(stream);
+                setStreamError(false);
+              })
+              .catch((playErr) => {
+                console.error("Error playing video stream:", playErr);
+                handleStreamError(playErr);
+              });
+          };
+
+          videoRef.current.onerror = (e) => {
+            console.error("Video element error:", e);
+            handleStreamError(e);
+          };
+        }
+      } catch (err) {
+        console.error("Erreur lors de l'accès à la caméra :", err);
+        handleStreamError(err);
       }
     }
-  }, [scanQRCode, toast]);
+    // eslint-disable-next-line
+  }, [isNativeApp, scanQRCodeNative, scanQRCodeWeb, toast]);
 
+  // Fonction pour réessayer d'accéder à la caméra
   const handleRetryAccess = async () => {
     await enableStream();
   };
 
+  // Activer le flux vidéo au montage du composant
   useEffect(() => {
-    // Utiliser l'implémentation Web pour toutes les plateformes
     enableStream();
-    // Nettoyage lors du démontage du composant
+
     return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-                // eslint-disable-next-line
-        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      if (isNativeApp) {
+        CameraPreview.stop();
+      } else {
+        if (videoRef.current && videoRef.current.srcObject) {
+                  // eslint-disable-next-line
+          let tracks = videoRef.current.srcObject.getTracks();
+          tracks.forEach((track) => track.stop());
+        }
       }
     };
-  }, [enableStream]);
+  }, [enableStream, isNativeApp]);
 
+  // Fonction pour scanner un nouveau QR code
   const handleScanNewQRCode = () => {
     setIsQRCodeDetected(false);
     setMateriel(null);
     enableStream();
   };
 
-  // Redirection si aucune équipe n'est sélectionnée
+  // Vérifier si une équipe est sélectionnée
   useEffect(() => {
     if (!teamUUID) {
       toast({
@@ -228,6 +360,7 @@ const VideoCaptureBisBis = () => {
     }
   }, [teamUUID, toast, history]);
 
+  // États pour les matériels, événements, équipes, etc.
   const [materiels, setMateriels] = useState([]);
   // eslint-disable-next-line no-unused-vars
   const [events, setEvents] = useState([]);
@@ -240,14 +373,13 @@ const VideoCaptureBisBis = () => {
   // eslint-disable-next-line no-unused-vars
   const [loading, setLoading] = useState(true);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-  const { isOpen, onClose } = useDisclosure();
   const [selectedMaterial, setSelectedMaterial] = useState(null);
-  const { isOpen: isAssociationModalOpen, onOpen: onAssociationModalOpen, onClose: onAssociationModalClose } = useDisclosure();
   const [teams, setTeams] = useState([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
   const { selectedEventId } = useEvent();
   const [selectedEventName, setSelectedEventName] = useState('');
 
+  // Récupérer les événements
   useEffect(() => {
     const fetchEvents = async () => {
       const { data, error } = await supabase
@@ -267,9 +399,10 @@ const VideoCaptureBisBis = () => {
     fetchEvents();
   }, [selectedEventId]);
 
+  // Récupérer les équipes associées à l'événement sélectionné
   useEffect(() => {
     const fetchTeams = async () => {
-      if (!selectedEventId) return; // Utilisez selectedEventId ici
+      if (!selectedEventId) return; // Utiliser selectedEventId ici
       setLoadingTeams(true);
       const { data, error } = await supabase
         .from('vianney_teams')
@@ -278,7 +411,7 @@ const VideoCaptureBisBis = () => {
 
       if (error) {
         console.error('Erreur lors de la récupération des équipes', error);
-        setTeams([]); // S'assurer que teams est réinitialisé en cas d'erreur
+        setTeams([]); // S'assurer que les équipes sont réinitialisées en cas d'erreur
       } else {
         setTeams(data);
       }
@@ -288,6 +421,7 @@ const VideoCaptureBisBis = () => {
     fetchTeams();
   }, [selectedEventId]);
 
+  // Affichage de l'événement sélectionné
   const eventDisplay = selectedEventName ? (
     <Badge colorScheme="blue" p="2">
       {selectedEventName} (Sélectionné)
@@ -296,6 +430,7 @@ const VideoCaptureBisBis = () => {
     <Text>Chargement de l'événement...</Text>
   );
 
+  // Charger les matériels et les équipes associées
   useEffect(() => {
     const chargerMateriels = async () => {
       const { data: materielsData, error: materielsError } = await supabase.from('vianney_inventaire_materiel').select('*');
@@ -345,11 +480,13 @@ const VideoCaptureBisBis = () => {
     fetchMateriels();
   }, [selectedEvent, setEvents, setLoadingEvents, setLoadingMateriels]);
 
+  // Ouvrir le modal d'association
   const handleOpenAssociationModal = (materiel) => {
     setSelectedMaterial(materiel); // Sélectionner le matériel
     onAssociationModalOpen(); // Ouvrir le modal
   };
 
+  // Supprimer un matériel
   const handleDelete = async () => {
     if (confirmDeleteId) {
       const { error } = await supabase.from('vianney_inventaire_materiel').delete().match({ id: confirmDeleteId });
@@ -359,7 +496,7 @@ const VideoCaptureBisBis = () => {
         // Mettre à jour l'état local pour refléter la suppression
         setMateriels(materiels.filter(materiel => materiel.id !== confirmDeleteId));
         onClose(); // Fermer le modal de confirmation
-        setConfirmDeleteId(null); // Réinitialiser l'id de confirmation
+        setConfirmDeleteId(null); // Réinitialiser l'ID de confirmation
         // Afficher un toast de succès
         toast({
           title: "Matériel supprimé avec succès",
@@ -371,6 +508,7 @@ const VideoCaptureBisBis = () => {
     }
   };
 
+  // Rendre le matériel
   const handleReturnMaterial = async (id) => {
     const updatedMateriels = materiels.map(materiel => {
       if (materiel.id === id) {
@@ -395,12 +533,14 @@ const VideoCaptureBisBis = () => {
     }
   };
 
+  // Changer d'équipe
   const handleTeamChange = (e) => {
     const teamId = e.target.value;
     const team = teams.find(t => t.id.toString() === teamId);
     setSelectedTeam(team);
   };
 
+  // Associer le matériel à l'équipe
   const handleAssociation = async () => {
     if (!selectedMaterial || !selectedTeam) return;
 
@@ -435,40 +575,61 @@ const VideoCaptureBisBis = () => {
       pt={{ base: "180px", md: "80px", xl: "80px" }}
       alignItems="center"
       justifyContent="center"
+      display="flex"
+      flexDirection="column"
     >
-      {/* Bouton de retour vers les matériels */}
+      {/* Bouton pour revenir aux matériels */}
       <Button onClick={() => history.push('/admin/materiels')} colorScheme="blue" mb={4}>
         Retour vers matériel
       </Button>
 
+      {/* Canvas caché pour le scan QR code sur le web */}
+      {!isNativeApp && (
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+      )}
+
       {/* Afficher le scanner */}
       {!isQRCodeDetected && !streamError && (
         <Box width="100%" position="relative" borderRadius="10px">
-          {/* Scanner web */}
-          <div style={{ position: "relative", width: "100%", borderRadius: "10px" }}>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              style={{ width: "100%" }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                top: "25%",
-                left: "25%",
-                width: "50%",
-                height: "50%",
-                border: "2px solid #00ff00",
-                borderRadius: "10px",
-              }}
-            ></div>
-          </div>
+          {isNativeApp ? (
+            <div id="cameraPreview" style={{ width: '100%', height: '100%' }}></div>
+          ) : (
+            <div style={{ position: "relative", width: "100%", borderRadius: "10px" }}>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                style={{ width: "100%", borderRadius: "10px" }}
+                onError={(e) => {
+                  console.error("Video element error:", e);
+                  setStreamError(true);
+                  toast({
+                    title: "Erreur",
+                    description: "Impossible de lire le flux vidéo de la caméra.",
+                    status: "error",
+                    duration: 5000,
+                    isClosable: true,
+                  });
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  top: "25%",
+                  left: "25%",
+                  width: "50%",
+                  height: "50%",
+                  border: "2px solid #00ff00",
+                  borderRadius: "10px",
+                }}
+              ></div>
+            </div>
+          )}
         </Box>
       )}
 
-      {/* Bouton pour lancer le scan si besoin (optionnel, ici déjà lancé automatiquement) */}
+      {/* Bouton pour démarrer le scan si nécessaire (optionnel, déjà démarré automatiquement) */}
       {!isQRCodeDetected && !isNativeApp && (
         <Button onClick={enableStream} colorScheme="green" mt={4}>
           Lancer le scan QR Code
@@ -514,13 +675,13 @@ const VideoCaptureBisBis = () => {
                 </HStack>
               </VStack>
             </Box>
-            {/* Ajouter le bouton pour scanner un nouveau QR code */}
+            {/* Bouton pour scanner un nouveau QR code */}
             {isQRCodeDetected && (
               <Button onClick={handleScanNewQRCode} colorScheme="green" mt={4}>
                 Scanner un nouveau QRCode de matériel
               </Button>
             )}
-            {/* Modal de confirmation de la suppression */}
+            {/* Modal de confirmation pour la suppression */}
             <Modal isOpen={isOpen} onClose={onClose}>
               <ModalOverlay />
               <ModalContent>
@@ -543,7 +704,7 @@ const VideoCaptureBisBis = () => {
                 <ModalCloseButton />
                 <ModalBody>
                   <VStack spacing={4} align="stretch">
-                    {/* Affichage de l'événement sélectionné */}
+                    {/* Afficher l'événement sélectionné */}
                     {eventDisplay}
                     {loadingTeams ? (
                       <Text>Chargement des équipes...</Text>
@@ -557,7 +718,7 @@ const VideoCaptureBisBis = () => {
                       </Select>
                     )}
 
-                    {/* Affichage du matériel sélectionné */}
+                    {/* Afficher le matériel sélectionné */}
                     {selectedMaterial ? (
                       <Badge colorScheme="green" p="2">
                         {selectedMaterial.nom} (Sélectionné)
