@@ -678,7 +678,7 @@ const VideoCaptureBisBis = () => {
             {/* Bouton pour scanner un nouveau QR code */}
             {isQRCodeDetected && (
               <Button onClick={handleScanNewQRCode} colorScheme="green" mt={4}>
-                Scanner un nouveau QRCode de matériel
+                Scanner nouveau QRCode
               </Button>
             )}
             {/* Modal de confirmation pour la suppression */}
