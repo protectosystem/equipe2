@@ -45,63 +45,67 @@ const Materiel = () => {
       </Flex>
 
       {/* Boutons */}
-      <Flex
-        direction={{ base: 'column', md: 'row' }}
-        gap={2} // Espacement entre les boutons
-        align={{ base: 'stretch', md: 'center' }}
-        justify="flex-start"
-        mb={4}
-      >
-        <Button
-          onClick={toggleCreateMaterialModal}
-          leftIcon={<Icon as={FcPlus} />}
-          colorScheme="blue"
-          variant="solid"
-          size="md"
-          boxShadow="sm"
-          _hover={{ boxShadow: 'md' }}
-          _active={{ boxShadow: 'lg' }}
-        >
-          Créer un matériel
-        </Button>
-        <Link to="/admin/qr-scanner">
-          <Button
-            leftIcon={<Icon as={FcCameraIdentification} />}
-            colorScheme="blue"
-            variant="solid"
-            size="md"
-            boxShadow="sm"
-            _hover={{ boxShadow: 'md' }}
-            _active={{ boxShadow: 'lg' }}
-          >
-            Scanner un QRCode
-          </Button>
-        </Link>
-        <Button
-          onClick={openModal}
-          leftIcon={<Icon as={FcPlus} />}
-          colorScheme="blue"
-          variant="solid"
-          size="md"
-          boxShadow="sm"
-          _hover={{ boxShadow: 'md' }}
-          _active={{ boxShadow: 'lg' }}
-        >
-          Feuille d'impression des étiquettes
-        </Button>
-        <Button
-          onClick={toggleCameraStreamModal}
-          leftIcon={<Icon as={FcVideoCall} />}
-          colorScheme="blue"
-          variant="solid"
-          size="md"
-          boxShadow="sm"
-          _hover={{ boxShadow: 'md' }}
-          _active={{ boxShadow: 'lg' }}
-        >
-          Flux Caméra
-        </Button>
-      </Flex>
+<Flex
+  direction={{ base: 'column', md: 'row' }}
+  gap={2} // Espacement entre les boutons
+  align={{ base: 'stretch', md: 'center' }}
+  justify="flex-start"
+  mb={4}
+>
+  <Button
+    onClick={toggleCreateMaterialModal}
+    leftIcon={<Icon as={FcPlus} />}
+    colorScheme="blue"
+    variant="solid"
+    size="md"
+    boxShadow="sm"
+    _hover={{ boxShadow: 'md' }}
+    _active={{ boxShadow: 'lg' }}
+    w="full" // Prend toute la largeur
+  >
+    Créer un matériel
+  </Button>
+  <Link to="/admin/qr-scanner" style={{ width: '100%' }}>
+    <Button
+      leftIcon={<Icon as={FcCameraIdentification} />}
+      colorScheme="blue"
+      variant="solid"
+      size="md"
+      boxShadow="sm"
+      _hover={{ boxShadow: 'md' }}
+      _active={{ boxShadow: 'lg' }}
+      w="full" // Prend toute la largeur
+    >
+      Scanner un QRCode
+    </Button>
+  </Link>
+  <Button
+    onClick={openModal}
+    leftIcon={<Icon as={FcPlus} />}
+    colorScheme="blue"
+    variant="solid"
+    size="md"
+    boxShadow="sm"
+    _hover={{ boxShadow: 'md' }}
+    _active={{ boxShadow: 'lg' }}
+    w="full" // Prend toute la largeur
+  >
+    Impression des étiquettes
+  </Button>
+  <Button
+    onClick={toggleCameraStreamModal}
+    leftIcon={<Icon as={FcVideoCall} />}
+    colorScheme="blue"
+    variant="solid"
+    size="md"
+    boxShadow="sm"
+    _hover={{ boxShadow: 'md' }}
+    _active={{ boxShadow: 'lg' }}
+    w="full" // Prend toute la largeur
+  >
+    Flux Caméra
+  </Button>
+</Flex>
 
       <AfficherMateriels />
 
