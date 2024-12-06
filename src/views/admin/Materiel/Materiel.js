@@ -14,22 +14,27 @@ import {
   ModalCloseButton,
   Icon,
 } from '@chakra-ui/react';
-import { FcPlus, FcCameraIdentification } from 'react-icons/fc';
+import { FcPlus, FcCameraIdentification, FcVideoCall } from 'react-icons/fc';
 import { Link } from 'react-router-dom';
 import InventaireForm from './components/InventaireForm';
 import AfficherMateriels from './components/AfficherMateriels';
 import QrCodeImageExport from './components/QrCodeImageExport';
 import VideoCaptureBisBis from './components/VideoCaptureBisBis';
+import CameraStream from './components/CameraStream';
 
 const Materiel = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [showCreateMaterial, setShowCreateMaterial] = useState(false);
   const [showQRScannerModal, setShowQRScannerModal] = useState(false);
+  const [showCameraStreamModal, setShowCameraStreamModal] = useState(false);
+
   const textColor = useColorModeValue('secondaryGray.900', 'white');
+
   const openModal = () => setIsOpen(true);
   const closeModal = () => setIsOpen(false);
   const toggleCreateMaterialModal = () => setShowCreateMaterial(!showCreateMaterial);
   const toggleQRScannerModal = () => setShowQRScannerModal(!showQRScannerModal);
+  const toggleCameraStreamModal = () => setShowCameraStreamModal(!showCameraStreamModal);
 
   return (
     <Box pt={{ base: '180px', md: '80px', xl: '80px' }}>
@@ -37,51 +42,65 @@ const Materiel = () => {
         <Heading color={textColor} fontSize="2xl" fontWeight="700" lineHeight="100%" mr={4}>
           Gestion du Matériel
         </Heading>
-        {/* Wrapper Flex pour les boutons */}
-        <Flex>
+      </Flex>
+
+      {/* Boutons */}
+      <Flex
+        direction={{ base: 'column', md: 'row' }}
+        gap={2} // Espacement entre les boutons
+        align={{ base: 'stretch', md: 'center' }}
+        justify="flex-start"
+        mb={4}
+      >
+        <Button
+          onClick={toggleCreateMaterialModal}
+          leftIcon={<Icon as={FcPlus} />}
+          colorScheme="blue"
+          variant="solid"
+          size="md"
+          boxShadow="sm"
+          _hover={{ boxShadow: 'md' }}
+          _active={{ boxShadow: 'lg' }}
+        >
+          Créer un matériel
+        </Button>
+        <Link to="/admin/qr-scanner">
           <Button
-            onClick={toggleCreateMaterialModal}
-            leftIcon={<Icon as={FcPlus} />}
+            leftIcon={<Icon as={FcCameraIdentification} />}
             colorScheme="blue"
             variant="solid"
             size="md"
             boxShadow="sm"
             _hover={{ boxShadow: 'md' }}
             _active={{ boxShadow: 'lg' }}
-            mr={2}
-            display="none"
           >
-            Créer un matériel
+            Scanner un QRCode
           </Button>
-          <Link to="/admin/qr-scanner">
-            <Button
-              leftIcon={<Icon as={FcCameraIdentification} />}
-              colorScheme="blue"
-              variant="solid"
-              size="md"
-              boxShadow="sm"
-              _hover={{ boxShadow: 'md' }}
-              _active={{ boxShadow: 'lg' }}
-              mr={2}
-            >
-              Scanner un QRCode
-            </Button>
-          </Link>
-          <Button
-            onClick={openModal}
-            leftIcon={<Icon as={FcPlus} />}
-            colorScheme="blue"
-            variant="solid"
-            size="md"
-            boxShadow="sm"
-            _hover={{ boxShadow: 'md' }}
-            _active={{ boxShadow: 'lg' }}
-            display="none"
-          >
-            Feuille d'impression des étiquettes
-          </Button>
-          {/* Nouveau bouton pour accéder au flux caméra */}
-        </Flex>
+        </Link>
+        <Button
+          onClick={openModal}
+          leftIcon={<Icon as={FcPlus} />}
+          colorScheme="blue"
+          variant="solid"
+          size="md"
+          boxShadow="sm"
+          _hover={{ boxShadow: 'md' }}
+          _active={{ boxShadow: 'lg' }}
+        >
+          Feuille d'impression des étiquettes
+        </Button>
+        <Button
+          onClick={toggleCameraStreamModal}
+          leftIcon={<Icon as={FcVideoCall} />}
+          colorScheme="blue"
+          variant="solid"
+          size="md"
+          boxShadow="sm"
+          _hover={{ boxShadow: 'md' }}
+          _active={{ boxShadow: 'lg' }}
+        >
+          Flux Caméra
+        </Button>
       </Flex>
 
       <AfficherMateriels />
@@ -129,6 +148,23 @@ const Materiel = () => {
           </ModalBody>
           <ModalFooter>
             <Button colorScheme="blue" mr={3} onClick={toggleQRScannerModal}>
+              Fermer
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Modal pour le flux caméra */}
+      <Modal isOpen={showCameraStreamModal} onClose={toggleCameraStreamModal} size="full">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Flux Caméra</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <CameraStream />
+          </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="blue" mr={3} onClick={toggleCameraStreamModal}>
               Fermer
             </Button>
           </ModalFooter>
